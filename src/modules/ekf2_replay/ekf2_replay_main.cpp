@@ -408,19 +408,20 @@ void Ekf2Replay::setEstimatorInput(uint8_t *data, uint8_t type) //将回放数�
 	struct log_STAT_s vehicle_status = {};
 
 	if (type == LOG_RPL1_MSG) {
-
 		uint8_t *dest_ptr = (uint8_t *)&replay_part1.time_ref;
 		parseMessage(data, dest_ptr, type);
-		_sensors.timestamp = replay_part1.time_ref;
-		_sensors.gyro_integral_dt = replay_part1.gyro_integral_dt;
-		_sensors.accelerometer_integral_dt = replay_part1.accelerometer_integral_dt;
-
+		_sensors.timestamp = replay_part1.time_ref; 
+		_sensors.gyro_integral_dt = replay_part1.gyro_integral_dt;  //螺旋仪
+		_sensors.accelerometer_integral_dt = replay_part1.accelerometer_integral_dt; //加速度计
+			
 		// 如果磁力计时间戳为零，则没有有效数据 ；否则，为磁力计的时间戳-传感器的时间戳
 		if (replay_part1.magnetometer_timestamp == 0) {
 			_sensors.magnetometer_timestamp_relative = (int32_t)sensor_combined_s::RELATIVE_TIMESTAMP_INVALID;
 
 		} else {
-			_sensors.magnetometer_timestamp_relative = (int32_t)(replay_part1.magnetometer_timestamp - _sensors.timestamp);
+			_sensors.magnetometer_timest
+				
+				amp_relative = (int32_t)(replay_part1.magnetometer_timestamp - _sensors.timestamp);
 		}
 
 		// 气压计数据……同上  If the barometer timestamp is zero then there is no valid data
@@ -443,7 +444,7 @@ void Ekf2Replay::setEstimatorInput(uint8_t *data, uint8_t type) //将回放数�
 		_sensors.baro_alt_meter = replay_part1.baro_alt_meter;
 		_part1_counter_ref = _message_counter;
 
-	} else if (type == LOG_RPL2_MSG) {
+	} else if (type == LOG_RPL2_MSG) {  //gps的一系列定义
 		uint8_t *dest_ptr = (uint8_t *)&replay_part2.time_pos_usec;
 		parseMessage(data, dest_ptr, type);
 		_gps.timestamp = replay_part2.time_pos_usec;
@@ -462,7 +463,7 @@ void Ekf2Replay::setEstimatorInput(uint8_t *data, uint8_t type) //将回放数�
 		_gps.alt = replay_part2.alt;
 		_read_part2 = true;
 
-	} else if (type == LOG_RPL3_MSG) {
+	} else if (type == LOG_RPL3_MSG) { //对光流的一系列定义
 		uint8_t *dest_ptr = (uint8_t *)&replay_part3.time_flow_usec;
 		parseMessage(data, dest_ptr, type);
 		_flow.timestamp = replay_part3.time_flow_usec;
@@ -474,7 +475,7 @@ void Ekf2Replay::setEstimatorInput(uint8_t *data, uint8_t type) //将回放数�
 		_flow.quality = replay_part3.flow_quality;
 		_read_part3 = true;
 
-	} else if (type == LOG_RPL4_MSG) {
+	} else if (type == LOG_RPL4_MSG) { //范围...
 		uint8_t *dest_ptr = (uint8_t *)&replay_part4.time_rng_usec;
 		parseMessage(data, dest_ptr, type);
 		_range.timestamp = replay_part4.time_rng_usec;
@@ -485,7 +486,7 @@ void Ekf2Replay::setEstimatorInput(uint8_t *data, uint8_t type) //将回放数�
 		_range.max_distance = 30.0f;
 		_read_part4 = true;
 
-	} else if (type == LOG_RPL6_MSG) {
+	} else if (type == LOG_RPL6_MSG) { //空速...
 		uint8_t *dest_ptr = (uint8_t *)&replay_part6.time_airs_usec;
 		parseMessage(data, dest_ptr, type);
 		_airspeed.timestamp = replay_part6.time_airs_usec;
@@ -493,7 +494,7 @@ void Ekf2Replay::setEstimatorInput(uint8_t *data, uint8_t type) //将回放数�
 		_airspeed.true_airspeed_m_s = replay_part6.true_airspeed_m_s;
 		_read_part6 = true;
 
-	} else if (type == LOG_RPL5_MSG) {
+	} else if (type == LOG_RPL5_MSG) { //高度
 		uint8_t *dest_ptr = (uint8_t *)&replay_part5.time_ev_usec;
 		parseMessage(data, dest_ptr, type);
 		_vehicle_vision_attitude.timestamp = replay_part5.time_ev_usec;
@@ -507,7 +508,7 @@ void Ekf2Replay::setEstimatorInput(uint8_t *data, uint8_t type) //将回放数�
 		_vehicle_vision_attitude.q[3] = replay_part5.q3;
 		_read_part5 = true;
 
-	} else if (type == LOG_LAND_MSG) {
+	} else if (type == LOG_LAND_MSG) { //着陆？
 		uint8_t *dest_ptr = (uint8_t *)&vehicle_landed.landed;
 		parseMessage(data, dest_ptr, type);
 		_land_detected.landed =  vehicle_landed.landed;
@@ -520,7 +521,7 @@ void Ekf2Replay::setEstimatorInput(uint8_t *data, uint8_t type) //将回放数�
 		}
 	}
 
-	else if (type == LOG_STAT_MSG) {
+	else if (type == LOG_STAT_MSG) { //姿态
 		uint8_t *dest_ptr = (uint8_t *)&vehicle_status.main_state;
 		parseMessage(data, dest_ptr, type);
 		_vehicle_status.is_rotary_wing = vehicle_status.is_rot_wing;
@@ -555,12 +556,12 @@ bool Ekf2Replay::needToSaveMessage(uint8_t type)
 		 type == LOG_CTS_MSG);
 }
 
-// update all estimator topics and write them to log file
+// 更新所有估计器主题并将其写入日志文件 update all estimator topics and write them to log file
 void Ekf2Replay::logIfUpdated()
 {
 	bool updated = false;
 
-	// update attitude
+	// 更新高度 update attitude
 	struct vehicle_attitude_s att = {};
 	orb_copy(ORB_ID(vehicle_attitude), _att_sub, &att);
 
