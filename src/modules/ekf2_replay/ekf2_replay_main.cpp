@@ -157,7 +157,8 @@ private:
 	struct vehicle_local_position_s _vehicle_vision_position;
 	struct vehicle_attitude_s _vehicle_vision_attitude;
 	struct vehicle_status_s _vehicle_status;
-//暂时将innovation翻译为残差…经过多方查找
+
+	//暂时将innovation翻译为残差…经过多方查找
 	uint32_t _numInnovSamples;	// 用于计算RMS残差值的样本数 number of samples used to calculate the RMS innovation values
 	float _velInnovSumSq;		// GPS速度残差平方和 GPS velocity innovation sum of squares
 	float _posInnovSumSq;		// GPS位置残差平方和 GPS position innovation sum of squares
@@ -165,14 +166,14 @@ private:
 	float _magInnovSumSq;		// 磁力计残差平方和 magnetometer innovation sum of squares
         float _tasInnovSumSq;		// 空速残差平方和 airspeed innovation sum of squares
 	
-	unsigned _message_counter; // 每个从日志读取的消息计数器都会增加 counter which will increase with every message read from the log
-	unsigned _part1_counter_ref;		// 当读取回放消息的part1（IMU数据）时，此时为_message_counter的值 this is the value of _message_counter when the part1 of the replay message is read (imu data)
-	bool _read_part2;				// 指示是否已读取回放消息的第2部分indicates if part 2 of replay message has been read
-	bool _read_part3;
-	bool _read_part4;
-	bool _read_part6;
-	bool _read_part5;
-
+	unsigned _message_counter;      // 每个从日志读取的消息计数器都会增加 counter which will increase with every message read from the log
+	unsigned _part1_counter_ref;	// 当读取回放消息的part1（IMU数据）时，此时为_message_counter的值 this is the value of _message_counter when the part1 of the replay message is read (imu data)
+	bool _read_part2;		// 指示是否已读取回放消息的第2部分gps indicates if part 2 of replay message has been read
+	bool _read_part3;               // …………………………………………………………3…………光流
+	bool _read_part4;               // 范围
+	bool _read_part6;	        // 飞行器高度
+	bool _read_part5;	        //传感器&空速
+ 
 	int _write_fd = -1;
 	px4_pollfd_struct_t _fds[1];
   
@@ -275,8 +276,12 @@ Ekf2Replay::~Ekf2Replay()
 }
 
 void Ekf2Replay::publishEstimatorInput() // 发布估计器的输入数据 publish input data for estimator
-{
-	if (_gps_pub == nullptr && _read_part2) {
+{  
+        /*流程：if xxx指向空&回放信息的对应部分读取 则公告发布者的主题，返回一个可以发布主题的句柄。
+	       else if 指向不为空&对应部分读取 则发布新数据到主题
+	       然后对回放信息的对应部分（是否读取）设成false
+	*/    
+	if (_gps_pub == nullptr && _read_part2) {  
 		_gps_pub = orb_advertise(ORB_ID(vehicle_gps_position), &_gps);
 
 	} else if (_gps_pub != nullptr && _read_part2) {
@@ -336,8 +341,9 @@ void Ekf2Replay::publishEstimatorInput() // 发布估计器的输入数据 publi
 	_read_part6 = false;
 }
 
-void Ekf2Replay::parseMessage(uint8_t *source, uint8_t *destination, uint8_t type)
+void Ekf2Replay::parseMessage(uint8_t *source, uint8_t *destination, uint8_t type)  //从缓冲区解析回放消息
 {
+	//大概是解析的不同数据类型的消息来进行不同（字符长度..）的处理
 	int i = 0;
 	int write_index = 0;
 
@@ -390,7 +396,7 @@ void Ekf2Replay::parseMessage(uint8_t *source, uint8_t *destination, uint8_t typ
 	}
 }
 
-void Ekf2Replay::setEstimatorInput(uint8_t *data, uint8_t type)
+void Ekf2Replay::setEstimatorInput(uint8_t *data, uint8_t type) //将回放数据从日志复制到结构中
 {
 	struct log_RPL1_s replay_part1 = {};
 	struct log_RPL2_s replay_part2 = {};
@@ -409,7 +415,7 @@ void Ekf2Replay::setEstimatorInput(uint8_t *data, uint8_t type)
 		_sensors.gyro_integral_dt = replay_part1.gyro_integral_dt;
 		_sensors.accelerometer_integral_dt = replay_part1.accelerometer_integral_dt;
 
-		// If the magnetometer timestamp is zero, then there is no valid data
+		// 如果磁力计时间戳为零，则没有有效数据 ；否则，为磁力计的时间戳-传感器的时间戳
 		if (replay_part1.magnetometer_timestamp == 0) {
 			_sensors.magnetometer_timestamp_relative = (int32_t)sensor_combined_s::RELATIVE_TIMESTAMP_INVALID;
 
@@ -417,7 +423,7 @@ void Ekf2Replay::setEstimatorInput(uint8_t *data, uint8_t type)
 			_sensors.magnetometer_timestamp_relative = (int32_t)(replay_part1.magnetometer_timestamp - _sensors.timestamp);
 		}
 
-		// If the barometer timestamp is zero then there is no valid data
+		// 气压计数据……同上  If the barometer timestamp is zero then there is no valid data
 		if (replay_part1.baro_timestamp == 0) {
 			_sensors.baro_timestamp_relative = (int32_t)sensor_combined_s::RELATIVE_TIMESTAMP_INVALID;
 
