@@ -539,12 +539,202 @@ void check_topc()
     }
 }
 ```
-# 5 参考资料
+# 5 uORB简单实例
+在这一部分，通过编写两个进程（即发布者和订阅者）之间的uORB通信进一步理解uORB过程。
+
+## 5.1 介绍
+在本次历程中，发布者负责生成随机数，订阅者通过订阅主题，来获取声称的数据，并打印输出
+
+## 5.2 加入主题定义
+* 在Firmware/msg中添加mytopic.msg，在文件里只需声明该主题的成员变量，在编译时，会自动在uORB目录下生成相应的mytopic.h文件，所有的主题头文件都是这样生成的，包括pixhawk系统自带的  
+
+例如：完整的数据结构是这样的
+
+```
+struct mytopic_s {
+    int32 r;
+};
+```
+则在mytopic.msg文件中只需写入如下内容：
+
+```
+int32 r
+```
+mytopic.msg
+![自定义主题书写格式](/Users/simonluo/Desktop/自定义主题.png)
+
+* 在该目录下的CMakeLists.txt文件中加入mytopic.msg  
+
+![CMake文件修改](/Users/simonluo/Desktop/主题cmake文件修改.png)  
+
+编译生成的对应mytopic.h
+![mytopic.h](/Users/simonluo/Desktop/mytopic.png)
+mytopic.h是代码编译时有系统自动生成
+
+## 5.3 加入发布者进程
+* 在Firmware/src/modules目录下新建一个mytopic_test文件夹，并创建cmake文档CMakeLists.txt，模仿其它程序cmake文件的书写方式写入如下内容
+
+```
+px4_add_module(
+	MODULE modules__mytopic_test
+	MAIN mytopic_test
+	STACK_MAIN 2000
+	SRCS
+		mytopic_test.cpp
+	DEPENDS
+		platforms__common
+	)
+```
+
+![alt text](/Users/simonluo/Desktop/test_cmake文件.png)
+
+* 在该目录下创建mytopic_test.cpp文件，写入发布者程序代码
+
+```
+#include <px4_config.h>
+#include <px4_tasks.h>
+#include <px4_posix.h>
+#include <unistd.h>
+#include <stdio.h>
+#include <string.h>
+#include <stdlib.h>
+#include <time.h>
+
+#include <uORB/uORB.h>
+#include <uORB/topics/mytopic.h>
+
+static orb_advert_t topic_handle;
+
+/*定义主题*/
+constexpr char __orb_mytopic_fields[] = "uint64_t timestamp;uint32_t noutputs;float[16] output;uint8_t[4] _padding0;";
+ORB_DEFINE(mytopic, struct mytopic_s, 32, __orb_mytopic_fields);
+
+extern "C" __EXPORT int mytopic_test_main(int argc, char *argv[]);
+int mytopic_test_main(int argc, char *argv[])
+{
+    /*随机产生一个初始化数据结构体*/
+    struct mytopic_s rd;
+    rd.r = rand() % 100;
+
+    /*公告主题*/
+    topic_handle = orb_advertise(ORB_ID(mytopic), &rd);
+
+    srand((unsigned) time(NULL));
+
+    for(int i = 0; i < 360; i ++) {
+        /*产生新的数据*/
+        rd.r = rand() % 100;
+        // PX4_INFO("[mytopic_test] Accelerometer \t%d", rd.r);
+
+        /*发布主题，更新数据*/
+        orb_publish(ORB_ID(mytopic), topic_handle, &rd);
+        usleep(200000);
+    }
+
+
+    return 0;
+}
+```
+
+![mytopic_test.cpp](/Users/simonluo/Desktop/mytopic_test.png)
+
+* 在Firmware/cmake/configs/nuttx_px4fmu-v2_default.cmake中加入modules/mytopic_test这样在编译时，就会编译这个程序
+
+![nuttx_px4fmu-v2_default.cmake](/Users/simonluo/Desktop/nuttx_px4fmu-v2_default.png)
+
+## 5.4 加入订阅者进程
+这里可以按照上面的方式再添加一个程序，只是代码不同；本例中，我们直接更改Firmware/src/examples中的px4_simple_app代码来实现
+
+* 在px4_simple_app.c文件中直接写入以下代码
+
+```
+#include <px4_config.h>
+#include <px4_tasks.h>
+#include <px4_posix.h>
+#include <unistd.h>
+#include <stdio.h>
+#include <poll.h>
+#include <string.h>
+
+#include <uORB/uORB.h>
+#include <uORB/topics/mytopic.h>
+
+static int topic_handle;
+
+__EXPORT int px4_simple_app_main(int argc, char *argv[]);
+
+int px4_simple_app_main(int argc, char *argv[])
+{
+    PX4_INFO("Hello Sky! \nThis is mytopic test!");
+
+    /*订阅mytopic主题*/
+    topic_handle = orb_subscribe(ORB_ID(mytopic));
+    orb_set_interval(topic_handle, 1000);
+
+    px4_pollfd_struct_t fds[] = {
+        { .fd = topic_handle,   .events = POLLIN },
+    };
+
+    int error_counter = 0;
+
+    for (int i = 0; i < 5; i++) {
+        /*每1s接收1个数据*/
+        int poll_ret = px4_poll(fds, 1, 1000);
+
+        if (poll_ret == 0) {
+            /*这表示在这1s内没有任何数据被获取到*/
+            PX4_ERR("[px4_simple_app] Got no data within a second");
+
+        } else if (poll_ret < 0) {
+            /* this is seriously bad - should be an emergency */
+            if (error_counter < 10 || error_counter % 50 == 0) {
+                /* use a counter to prevent flooding (and slowing us down) */
+                PX4_ERR("[px4_simple_app] ERROR return value from poll(): %d"
+                       , poll_ret);
+            }
+
+            error_counter++;
+
+        } else {
+
+            if (fds[0].revents & POLLIN) {
+                struct mytopic_s raw;
+                orb_copy(ORB_ID(mytopic), topic_handle, &raw);
+                PX4_WARN("[px4_simple_app] Accelerometer:\t%d", raw.r);
+            }
+        }
+    }
+    PX4_INFO("exiting");
+
+    return 0;
+}
+```
+
+![px4_simple_app](/Users/simonluo/Desktop/px4_simple_app.png)
+
+* 在Firmware/cmake/configs/nuttx_px4fmu-v2_default.cmake中加入modules/mytopic_test这样在编译时，就会编译这个程序
+
+![alt text](/Users/simonluo/Desktop/nuttx_px4fmu-v2_default...png)
+
+## 5.5 测试
+* 编译固件 `make px4fmu-v2_default`
+* 上传固件 `make px4fmu-v2_default upload`
+* 进入nuttshell `screen /dev/tty.xx BAUDRATE 8N1`
+* 后台运行发布者程序 `mytopic_test &`
+* 运行订阅者程序 `px4_simple_app`  
+运行结果
+![运行结果](/Users/simonluo/Desktop/运行结果.png)
+
+
+
+# 6 参考资料
 [PX4开发指南](http://dev.px4.io)    
 [第一个机载应用程序教程](http://www.pixhawk.com/start?id=zh/dev/px4_simple_app)  
 [Pixhawk飞控系统之uORB深入解析](http://blog.arm.so/armteg/pixhawk/183-0503.html)  
 [pixhawk自学笔记之uorb学习总结](http://blog.csdn.net/xiao2yizhizai/article/details/50684450)  
-[PX4/Pixhawk--uORB深入理解和应用](http://blog.csdn.net/FreeApe/article/details/46880637)
-
+[PX4/Pixhawk--uORB深入理解和应用](http://blog.csdn.net/FreeApe/article/details/46880637)  
+[Pixhawk---在cmake编译方式下新建一个自定义主题](http://blog.csdn.net/xinyu3307/article/details/52195535)  
+[Pixhawk---通过串口方式添加一个自定义传感器（超声波为例）](http://blog.csdn.net/freeape/article/details/47837415)  
+[pixhawk飞控中添加uORB主题](http://blog.csdn.net/u014666004/article/details/51260392)
 
    
