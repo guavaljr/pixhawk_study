@@ -561,14 +561,14 @@ struct mytopic_s {
 int32 r
 ```
 mytopic.msg
-![自定义主题书写格式](https://github.com/BUPT-Simon/pixhawk_study/blob/master/src/modules/uORB/简单实例截图/自定义主题.png)
+![自定义主题书写格式](简单实例截图/自定义主题.png)
 
 * 在该目录下的CMakeLists.txt文件中加入mytopic.msg  
 
-![CMake文件修改](https://github.com/BUPT-Simon/pixhawk_study/blob/master/src/modules/uORB/简单实例截图/主题cmake文件修改.png)  
+![CMake文件修改](简单实例截图/主题cmake文件修改.png)  
 
 编译生成的对应mytopic.h
-![mytopic.h](https://github.com/BUPT-Simon/pixhawk_study/blob/master/src/modules/uORB/简单实例截图/mytopic.png)
+![mytopic.h](简单实例截图/mytopic.png)
 mytopic.h是代码编译时有系统自动生成
 
 ## 5.3 加入发布者进程
@@ -586,7 +586,7 @@ px4_add_module(
 	)
 ```
 
-![alt text](https://github.com/BUPT-Simon/pixhawk_study/blob/master/src/modules/uORB/简单实例截图/test_cmake文件.png)
+![alt text](简单实例截图/test_cmake文件.png)
 
 * 在该目录下创建mytopic_test.cpp文件，写入发布者程序代码
 
@@ -636,11 +636,11 @@ int mytopic_test_main(int argc, char *argv[])
 }
 ```
 
-![mytopic_test.cpp](https://github.com/BUPT-Simon/pixhawk_study/blob/master/src/modules/uORB/简单实例截图/mytopic_test.png)
+![mytopic_test.cpp](简单实例截图/mytopic_test.png)
 
 * 在Firmware/cmake/configs/nuttx_px4fmu-v2_default.cmake中加入modules/mytopic_test这样在编译时，就会编译这个程序
 
-![nuttx_px4fmu-v2_default.cmake](https://github.com/BUPT-Simon/pixhawk_study/blob/master/src/modules/uORB/简单实例截图/nuttx_px4fmu-v2_default.png)
+![nuttx_px4fmu-v2_default.cmake](简单实例截图/nuttx_px4fmu-v2_default.png)
 
 ## 5.4 加入订阅者进程
 这里可以按照上面的方式再添加一个程序，只是代码不同；本例中，我们直接更改Firmware/src/examples中的px4_simple_app代码来实现
@@ -710,11 +710,11 @@ int px4_simple_app_main(int argc, char *argv[])
 }
 ```
 
-![px4_simple_app](https://github.com/BUPT-Simon/pixhawk_study/blob/master/src/modules/uORB/简单实例截图/px4_simple_app.png)
+![px4_simple_app](简单实例截图/px4_simple_app.png)
 
 * 在Firmware/cmake/configs/nuttx_px4fmu-v2_default.cmake中加入modules/mytopic_test这样在编译时，就会编译这个程序
 
-![alt text](https://github.com/BUPT-Simon/pixhawk_study/blob/master/src/modules/uORB/简单实例截图/nuttx_px4fmu-v2_default...png)
+![alt text](简单实例截图/nuttx_px4fmu-v2_default...png)
 
 ## 5.5 测试
 * 编译固件 `make px4fmu-v2_default`
@@ -723,7 +723,7 @@ int px4_simple_app_main(int argc, char *argv[])
 * 后台运行发布者程序 `mytopic_test &`
 * 运行订阅者程序 `px4_simple_app`  
 运行结果
-![运行结果](https://github.com/BUPT-Simon/pixhawk_study/blob/master/src/modules/uORB/简单实例截图/运行结果.png)
+![运行结果](简单实例截图/运行结果.png)
 
 
 
