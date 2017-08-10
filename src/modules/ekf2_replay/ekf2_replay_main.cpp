@@ -535,7 +535,7 @@ void Ekf2Replay::setEstimatorInput(uint8_t *data, uint8_t type) //将回放数�
 	}
 }
 
-void Ekf2Replay::writeMessage(int &fd, void *data, size_t size)
+void Ekf2Replay::writeMessage(int &fd, void *data, size_t size) //向日志文件写入消息
 {
 	if (size != ::write(fd, data, size)) {
 		PX4_WARN("error writing to file");
@@ -567,6 +567,7 @@ void Ekf2Replay::logIfUpdated()
 
 	// if the timestamp of the attitude is zero, then this means that the ekf did not
 	// do an update so we can ignore this message and just continue
+	//如果高度的时间戳为0，那么这意味着ekf没有更新，所以我们可以忽略这个消息继续
 	if (att.timestamp == 0) {
 		return;
 	}
@@ -580,6 +581,7 @@ void Ekf2Replay::logIfUpdated()
 	log_message.body.att.q_x = att.q[1];
 	log_message.body.att.q_y = att.q[2];
 	log_message.body.att.q_z = att.q[3];
+	//应该是一种计算姿态的算法...roll是滚转 pitch是俯仰 yaw是偏航角
 	log_message.body.att.roll = atan2f(2 * (att.q[0] * att.q[1] + att.q[2] * att.q[3]),
 					   1 - 2 * (att.q[1] * att.q[1] + att.q[2] * att.q[2]));
 	log_message.body.att.pitch = asinf(2 * (att.q[0] * att.q[2] - att.q[3] * att.q[1]));
@@ -591,13 +593,13 @@ void Ekf2Replay::logIfUpdated()
 
 	writeMessage(_write_fd, (void *)&log_message.head1, _formats[LOG_ATT_MSG].length);
 
-	// update local position
-	orb_check(_lpos_sub, &updated);
+	// 更新本地位置update local position
+	orb_check(_lpos_sub, &updated); //updated:如果当最后一次更新的数据被获取了，检测到并设置updated为ture;
 
 	if (updated) {
 		struct vehicle_local_position_s lpos = {};
 		orb_copy(ORB_ID(vehicle_local_position), _lpos_sub, &lpos);
-
+        //lpos中的数据赋值给log_message.body.lops
 		log_message.type = LOG_LPOS_MSG;
 		log_message.head1 = HEAD_BYTE1;
 		log_message.head2 = HEAD_BYTE2;
@@ -625,7 +627,7 @@ void Ekf2Replay::logIfUpdated()
 		writeMessage(_write_fd, (void *)&log_message.head1, _formats[LOG_LPOS_MSG].length);
 	}
 
-	// update estimator status
+	// 更新估计器的状态 操作同上 update estimator status
 	orb_check(_estimator_status_sub, &updated);
 
 	if (updated) {
@@ -677,7 +679,7 @@ void Ekf2Replay::logIfUpdated()
 
 	}
 
-	// update ekf2 innovations
+	// 更新ekf2的..残差？  update ekf2 innovations
 	orb_check(_innov_sub, &updated);
 
 	if (updated) {
@@ -719,7 +721,7 @@ void Ekf2Replay::logIfUpdated()
 
 		writeMessage(_write_fd, (void *)&log_message.head1, _formats[LOG_EST5_MSG].length);
 
-		// optical flow innovations and innovation variances
+		// 光流残差和残差差异 optical flow innovations and innovation variances
 		log_message.type = LOG_EST6_MSG;
 		log_message.head1 = HEAD_BYTE1;
 		log_message.head2 = HEAD_BYTE2;
@@ -734,7 +736,7 @@ void Ekf2Replay::logIfUpdated()
 		log_message.body.innov3.s[5] = innov.hagl_innov_var;
 		writeMessage(_write_fd, (void *)&log_message.head1, _formats[LOG_EST6_MSG].length);
 
-		// Update tuning metrics
+		// 更新调整指标 Update tuning metrics
 		_numInnovSamples++;
 		_velInnovSumSq += innov.vel_pos_innov[0] * innov.vel_pos_innov[0] + innov.vel_pos_innov[1] * innov.vel_pos_innov[1];
 		_posInnovSumSq += innov.vel_pos_innov[3] * innov.vel_pos_innov[3] + innov.vel_pos_innov[4] * innov.vel_pos_innov[4];
@@ -745,7 +747,7 @@ void Ekf2Replay::logIfUpdated()
 
 	}
 
-	// update control state
+	// 更新控制状态 update control state
 	orb_check(_control_state_sub, &updated);
 
 	if (updated) {
@@ -765,15 +767,15 @@ void Ekf2Replay::logIfUpdated()
 	}
 }
 
-void Ekf2Replay::publishAndWaitForEstimator()
+void Ekf2Replay::publishAndWaitForEstimator() //发布估计器的输入数据
 {
-	// reset the counter reference for the imu replay topic
+	// 重置IMU replay主题的计数器参考数据 reset the counter reference for the imu replay topic
 	_part1_counter_ref = 0;
 
 	publishEstimatorInput();
 
-	// wait for estimator output to arrive
-	int pret = px4_poll(&_fds[0], (sizeof(_fds) / sizeof(_fds[0])), 1000);
+	// 等待估计量输出到达 wait for estimator output to arrive
+	int pret = px4_poll(&_fds[0], (sizeof(_fds) / sizeof(_fds[0])), 1000);  // 参考poll的功能
 
 	if (pret == 0) {
 		PX4_WARN("timeout");
@@ -784,12 +786,12 @@ void Ekf2Replay::publishAndWaitForEstimator()
 	}
 
 	if (_fds[0].revents & POLLIN) {
-		// write all estimator messages to replay log file
+		// 将所有估计消息写入回放日志文件 write all estimator messages to replay log file
 		logIfUpdated();
 	}
 }
 
-void Ekf2Replay::setUserParams(const char *filename)
+void Ekf2Replay::setUserParams(const char *filename)  //设置用户参数  ..个人文件？
 {
 	std::string line;
 	std::ifstream myfile(filename);
@@ -813,12 +815,12 @@ void Ekf2Replay::setUserParams(const char *filename)
 			param_t handle = param_find(param_name.c_str());
 			param_type_t param_format = param_type(handle);
 
-			if (param_format == PARAM_TYPE_INT32) {
+			if (param_format == PARAM_TYPE_INT32) {  //参数格式是..32位int
 				int32_t value = 0;
 				value = (int32_t)param_value_double;
 				param_set(handle, (const void *)&value);
 
-			} else if (param_format == PARAM_TYPE_FLOAT) {
+			} else if (param_format == PARAM_TYPE_FLOAT) {  // float
 				float value = 0;
 				value = (float)param_value_double;
 				param_set(handle, (const void *)&value);
@@ -838,9 +840,11 @@ void Ekf2Replay::task_main()
 
 	// Open log file from which we read data
 	// TODO Check if file exists
+	// 打开我们从中读取数据的日志文件
 	int fd = ::open(_file_name, O_RDONLY);
 
 	// create path to write a replay file
+	// 创建写入回放文件的路径
 	char *replay_log_name;
 	replay_log_name = strtok(_file_name, ".");
 	char tmp[] = "_replayed.px4log";
@@ -850,13 +854,14 @@ void Ekf2Replay::task_main()
 	strcat(path_to_replay_log, tmp);
 
 	// create path which tells user location of replay file
+	// 创建路径，告诉用户回放文件的位置
 	char tmp2[] = "./build_posix_sitl_replay/src/firmware/posix";
 	char *replay_file_location = (char *) malloc(1 + strlen(tmp) + strlen(tmp2) + strlen(replay_log_name));
 	strcat(replay_file_location, tmp2);
 	strcat(replay_file_location, replay_log_name);
 	strcat(replay_file_location, tmp);
 
-	// open logfile to write
+	// 打开日志文件来写 open logfile to write
 	_write_fd = ::open(path_to_replay_log, O_WRONLY | O_CREAT, S_IRWXU);
 
 	std::ifstream tmp_file;
@@ -869,8 +874,8 @@ void Ekf2Replay::task_main()
 		getline(tmp_file, line);
 
 		if (line.empty()) {
-			// the parameter file is empty so write the default values to it
-			set_default_params_in_file = true;
+			// 参数文件是空的，所以写入默认值 the parameter file is empty so write the default values to it
+			set_default_params_in_file = true; //默认值true
 		}
 	}
 
@@ -878,14 +883,14 @@ void Ekf2Replay::task_main()
 
 	std::ofstream myfile(param_file, std::ios::app);
 
-	// subscribe to estimator topics
-	_att_sub = orb_subscribe(ORB_ID(vehicle_attitude));
+	// 订估计器主题 高度 状态 残差 本地位置 控制状态 subscribe to estimator topics
+	_att_sub = orb_subscribe(ORB_ID(vehicle_attitude)); 
 	_estimator_status_sub = orb_subscribe(ORB_ID(estimator_status));
 	_innov_sub = orb_subscribe(ORB_ID(ekf2_innovations));
 	_lpos_sub = orb_subscribe(ORB_ID(vehicle_local_position));
 	_control_state_sub = orb_subscribe(ORB_ID(control_state));
 
-	// we use attitude updates from the estimator for synchronisation
+	// 使用来自估计器的高度更新来进行同步 we use attitude updates from the estimator for synchronisation
 	_fds[0].fd = _att_sub;
 	_fds[0].events = POLLIN;
 
@@ -900,7 +905,7 @@ void Ekf2Replay::task_main()
 		uint8_t header[3] = {};
 
 		if (::read(fd, header, 3) != 3) {
-			if (!read_first_header) {
+			if (!read_first_header) { //错误读取日志文件
 				PX4_WARN("error reading log file, is the path printed above correct?");
 
 			} else {
@@ -914,19 +919,20 @@ void Ekf2Replay::task_main()
 		read_first_header = true;
 
 		if ((header[0] != HEAD_BYTE1 || header[1] != HEAD_BYTE2)) {
-			// we assume that the log file is finished here
+			// 我们假设日志文件在这里完成 we assume that the log file is finished here
 			PX4_WARN("Done!");
 			_task_should_exit = true;
 			continue;
 		}
 
 		// write header but only for messages which are not generated by the estimator
+		// 写header(?)，但仅用于不是由估计器生成的消息
 		if (needToSaveMessage(header[2])) {
 			writeMessage(_write_fd, &header[0], 3);
 		}
 
-		if (header[2] == LOG_FORMAT_MSG) {
-			// format message
+		// 对不同的信息进行操作处理
+		if (header[2] == LOG_FORMAT_MSG) { // 如果是格式信息
 			struct log_format_s f;
 
 			if (::read(fd, &f.type, sizeof(f)) != sizeof(f)) {
@@ -939,8 +945,7 @@ void Ekf2Replay::task_main()
 
 			memcpy(&_formats[f.type], &f, sizeof(f));
 
-		} else if (header[2] == LOG_PARM_MSG) {
-			// parameter message
+		} else if (header[2] == LOG_PARM_MSG) { // 参数信息
 			if (::read(fd, &data[0], sizeof(log_PARM_s)) != sizeof(log_PARM_s)) {
 				PRINT_READ_ERROR;
 				_task_should_exit = true;
@@ -949,7 +954,7 @@ void Ekf2Replay::task_main()
 
 			writeMessage(_write_fd, &data[0], sizeof(log_PARM_s));
 
-			// apply the parameters
+			// 应用参数apply the parameters
 			char param_name[16];
 
 			for (unsigned i = 0; i < 16; i++) {
@@ -976,6 +981,7 @@ void Ekf2Replay::task_main()
 
 			// if the user param file was empty then we fill it with the ekf2 parameter values from
 			// the log file
+			// 如果用户参数文件为空，那么我们将填写日志文件的ekf2参数值
 			if (set_default_params_in_file) {
 				if (strncmp(param_name, "EKF2", 4) == 0) {
 					std::ostringstream os;
@@ -986,8 +992,7 @@ void Ekf2Replay::task_main()
 				}
 			}
 
-		} else if (header[2] == LOG_VER_MSG) {
-			// version message
+		} else if (header[2] == LOG_VER_MSG) { // 版本信息 version message
 			if (::read(fd, &data[0], sizeof(log_VER_s)) != sizeof(log_VER_s)) {
 				PRINT_READ_ERROR;
 				_task_should_exit = true;
@@ -996,8 +1001,7 @@ void Ekf2Replay::task_main()
 
 			writeMessage(_write_fd, &data[0], sizeof(log_VER_s));
 
-		} else if (header[2] == LOG_TIME_MSG) {
-			// time message
+		} else if (header[2] == LOG_TIME_MSG) { // 时间信息
 			if (::read(fd, &data[0], sizeof(log_TIME_s)) != sizeof(log_TIME_s)) {
 				// assume that this is because we have reached the end of the file
 				PX4_INFO("Done!");
@@ -1010,13 +1014,15 @@ void Ekf2Replay::task_main()
 		} else {
 			// the first time we arrive here we should apply the parameters specified in the user file
 			// this makes sure they are applied after the parameter values of the log file
+			// 我们第一次到达这里，我们应该应用用户文件中指定的参数
+			// 这确保它们被应用在日志文件的参数值之后
 			if (!set_user_params) {
 				myfile.close();
 				setUserParams(param_file);
 				set_user_params = true;
 			}
 
-			// data message
+			// 数据信息data message
 			if (::read(fd, &data[0], _formats[header[2]].length - 3) != _formats[header[2]].length - 3) {
 				PX4_INFO("Done!");
 				_task_should_exit = true;
@@ -1025,6 +1031,7 @@ void Ekf2Replay::task_main()
 
 			// all messages which we are not getting from the estimator are written
 			// back into the replay log file
+			// 我们没有从估计器得到的所有消息都是写回到replay日志文件
 			if (needToSaveMessage(header[2])) {
 				writeMessage(_write_fd, &data[0], _formats[header[2]].length - 3);
 			}
@@ -1032,15 +1039,18 @@ void Ekf2Replay::task_main()
 			if (header[2] == LOG_RPL1_MSG && _part1_counter_ref > 0) {
 				// we have found another imu replay message while we still have one waiting to be published.
 				// so publish that now
+				// 有另一个IMU replay消息，还有一个等待发布，所以现在发布
 				publishAndWaitForEstimator();
 			}
 
-			// set estimator input data
+			// 设置估计器输入数据 set estimator input data
 			setEstimatorInput(&data[0], header[2]);
 
 			// we have read the imu replay message (part 1) and have waited 3 more cycles for other replay message parts
 			// e.g. flow, gps or range. we know that in case they were written to the log file they should come right after
 			// the first replay message, therefore, we can kick the estimator now
+			// 我们已经读取了imu replay消息（第1部分），并为其他回放消息部分等待了3个循环
+			// 如光流 gps 范围。我们知道如果他们被写入日志文件，他们应该在第一个回放消息之后。
 			if (_part1_counter_ref > 0 && _part1_counter_ref < _message_counter - 3) {
 				publishAndWaitForEstimator();
 			}
@@ -1053,6 +1063,7 @@ void Ekf2Replay::task_main()
 	ekf2_replay::instance = nullptr;
 
 	// Report sensor innovation RMS values to assist with time delay tuning
+	// 报告传感器残差RMS（均方根值）值，以协助延时调谐
 	if (_numInnovSamples > 0) {
 		PX4_INFO("GPS vel innov RMS = %6.3f", (double)sqrtf(_velInnovSumSq / _numInnovSamples));
 		PX4_INFO("GPS pos innov RMS = %6.3f", (double)sqrtf(_posInnovSumSq / _numInnovSamples));
@@ -1072,7 +1083,7 @@ int Ekf2Replay::start()
 {
 	ASSERT(_control_task == -1);
 
-	/* start the task */
+	/* 开始任务 */
 	_control_task = px4_task_spawn_cmd("ekf2_replay",
 					   SCHED_DEFAULT,
 					   SCHED_PRIORITY_MAX - 5,
@@ -1098,21 +1109,21 @@ int ekf2_replay_main(int argc, char *argv[])
 	if (!strcmp(argv[1], "start")) {
 
 		if (ekf2_replay::instance != nullptr) {
-			PX4_WARN("already running");
+			PX4_WARN("already running");  //运行中
 			return 1;
 		}
 
 		ekf2_replay::instance = new Ekf2Replay(argv[2]);
 
 		if (ekf2_replay::instance == nullptr) {
-			PX4_WARN("alloc failed");
-			return 1;
+			PX4_WARN("alloc failed"); //分配失败
+			return 1; 
 		}
 
 		if (OK != ekf2_replay::instance->start()) {
 			delete ekf2_replay::instance;
 			ekf2_replay::instance = nullptr;
-			PX4_WARN("start failed");
+			PX4_WARN("start failed"); //启动失败
 			return 1;
 		}
 
@@ -1121,13 +1132,13 @@ int ekf2_replay_main(int argc, char *argv[])
 
 	if (!strcmp(argv[1], "stop")) {
 		if (ekf2_replay::instance == nullptr) {
-			PX4_WARN("not running");
+			PX4_WARN("not running"); //没有运行
 			return 1;
 		}
 
 		ekf2_replay::instance->exit();
 
-		// wait for the destruction of the instance
+		// 等待instance瓦解  wait for the destruction of the instance
 		while (ekf2_replay::instance != nullptr) {
 			usleep(50000);
 		}
@@ -1137,15 +1148,15 @@ int ekf2_replay_main(int argc, char *argv[])
 
 	if (!strcmp(argv[1], "status")) {
 		if (ekf2_replay::instance) {
-			PX4_WARN("running");
+			PX4_WARN("running"); //运行
 			return 0;
 
 		} else {
-			PX4_WARN("not running");
+			PX4_WARN("not running"); //没有运行
 			return 1;
 		}
 	}
 
-	PX4_WARN("unrecognized command");
+	PX4_WARN("unrecognized command"); //无法识别的命令
 	return 1;
 }
