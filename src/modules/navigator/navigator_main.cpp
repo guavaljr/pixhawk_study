@@ -106,16 +106,17 @@ Navigator::Navigator() :
 	_param_mc_alt_acceptance_radius(this, "MC_ALT_RAD")
 {
 	/* Create a list of our possible navigation types */
-	_navigation_mode_array[0] = &_mission;
-	_navigation_mode_array[1] = &_loiter;
-	_navigation_mode_array[2] = &_rtl;
-	_navigation_mode_array[3] = &_dataLinkLoss;
-	_navigation_mode_array[4] = &_engineFailure;
-	_navigation_mode_array[5] = &_gpsFailure;
-	_navigation_mode_array[6] = &_rcLoss;
-	_navigation_mode_array[7] = &_takeoff;
-	_navigation_mode_array[8] = &_land;
-	_navigation_mode_array[9] = &_follow_target;
+	//建立可能使用的导航类型
+	_navigation_mode_array[0] = &_mission;//任务
+	_navigation_mode_array[1] = &_loiter;//待机
+	_navigation_mode_array[2] = &_rtl;//返航模式 (RTL, return to launch)
+	_navigation_mode_array[3] = &_dataLinkLoss;//数据链路故障
+	_navigation_mode_array[4] = &_engineFailure;//引擎故障
+	_navigation_mode_array[5] = &_gpsFailure;//gps故障
+	_navigation_mode_array[6] = &_rcLoss;//遥控故障 (RC, remote control)
+	_navigation_mode_array[7] = &_takeoff;//起飞
+	_navigation_mode_array[8] = &_land;//着陆
+	_navigation_mode_array[9] = &_follow_target;//跟随目标
 
 	updateParams();
 }
@@ -125,9 +126,11 @@ Navigator::~Navigator()
 	if (_navigator_task != -1) {
 
 		/* task wakes up every 100ms or so at the longest */
+		//每最长大约100ms唤醒一次
 		_task_should_exit = true;
 
 		/* wait for a second for the task to quit at our request */
+		//在我们请求时，等待一秒任务退出
 		unsigned i = 0;
 
 		do {
@@ -146,31 +149,31 @@ Navigator::~Navigator()
 }
 
 void
-Navigator::global_position_update()
+Navigator::global_position_update()//全球位置更新
 {
 	orb_copy(ORB_ID(vehicle_global_position), _global_pos_sub, &_global_pos);
 }
 
 void
-Navigator::local_position_update()
+Navigator::local_position_update()//本地位置更新
 {
 	orb_copy(ORB_ID(vehicle_local_position), _local_pos_sub, &_local_pos);
 }
 
 void
-Navigator::gps_position_update()
+Navigator::gps_position_update()//gps位置更新
 {
 	orb_copy(ORB_ID(vehicle_gps_position), _gps_pos_sub, &_gps_pos);
 }
 
 void
-Navigator::sensor_combined_update()
+Navigator::sensor_combined_update()//传感器组合更新
 {
 	orb_copy(ORB_ID(sensor_combined), _sensor_combined_sub, &_sensor_combined);
 }
 
 void
-Navigator::home_position_update(bool force)
+Navigator::home_position_update(bool force)//家位置更新
 {
 	bool updated = false;
 	orb_check(_home_pos_sub, &updated);
@@ -196,6 +199,7 @@ Navigator::vehicle_status_update()
 {
 	if (orb_copy(ORB_ID(vehicle_status), _vstatus_sub, &_vstatus) != OK) {
 		/* in case the commander is not be running */
+		//以防commander未在运行
 		_vstatus.arming_state = vehicle_status_s::ARMING_STATE_STANDBY;
 	}
 }
@@ -207,7 +211,7 @@ Navigator::vehicle_land_detected_update()
 }
 
 void
-Navigator::params_update()
+Navigator::params_update()//参数更新
 {
 	parameter_update_s param_update;
 	orb_copy(ORB_ID(parameter_update), _param_update_sub, &param_update);
@@ -231,6 +235,7 @@ Navigator::task_main()
 
 	/* Try to load the geofence:
 	 * if /fs/microsd/etc/geofence.txt load from this file */
+	//尝试读取地理围栏，如果/fs/microsd/etc/geofence.txt存在，读取之
 	struct stat buffer;
 
 	if (stat(GEOFENCE_FILENAME, &buffer) == 0) {
@@ -239,6 +244,7 @@ Navigator::task_main()
 	}
 
 	/* do subscriptions */
+	//各种订阅
 	_global_pos_sub = orb_subscribe(ORB_ID(vehicle_global_position));
 	_local_pos_sub = orb_subscribe(ORB_ID(vehicle_local_position));
 	_gps_pos_sub = orb_subscribe(ORB_ID(vehicle_gps_position));
@@ -253,6 +259,7 @@ Navigator::task_main()
 	_vehicle_command_sub = orb_subscribe(ORB_ID(vehicle_command));
 
 	/* copy all topics first time */
+	//首次拷贝所有主题
 	vehicle_status_update();
 	vehicle_land_detected_update();
 	global_position_update();
@@ -264,24 +271,30 @@ Navigator::task_main()
 	params_update();
 
 	/* wakeup source(s) */
+	//唤醒源端
 	px4_pollfd_struct_t fds[1] = {};
 
 	/* Setup of loop */
+	//准备循环
 	fds[0].fd = _global_pos_sub;
 	fds[0].events = POLLIN;
 
 	bool global_pos_available_once = false;
 
 	/* rate-limit global pos subscription to 20 Hz / 50 ms */
+	//全球地址位置订阅率限制20Hz
 	orb_set_interval(_global_pos_sub, 49);
 
+	//主循环
 	while (!_task_should_exit) {
 
 		/* wait for up to 1000ms for data */
+		//等待数据，最多1000ms
 		int pret = px4_poll(&fds[0], (sizeof(fds) / sizeof(fds[0])), 1000);
 
 		if (pret == 0) {
 			/* timed out - periodic check for _task_should_exit, etc. */
+			//超时-周期性检查退出任务变量等
 			if (global_pos_available_once) {
 				global_pos_available_once = false;
 			}
@@ -298,6 +311,7 @@ Navigator::task_main()
 
 			if (fds[0].revents & POLLIN) {
 				/* success, global pos is available */
+				//成功，更新全球地理位置
 				global_position_update();
 
 				if (_geofence.getSource() == Geofence::GF_SOURCE_GLOBALPOS) {
@@ -313,6 +327,7 @@ Navigator::task_main()
 		bool updated;
 
 		/* gps updated */
+		//gps更新
 		orb_check(_gps_pos_sub, &updated);
 
 		if (updated) {
@@ -324,6 +339,7 @@ Navigator::task_main()
 		}
 
 		/* local position updated */
+		//本地位置更新
 		orb_check(_local_pos_sub, &updated);
 
 		if (updated) {
@@ -331,6 +347,7 @@ Navigator::task_main()
 		}
 
 		/* sensors combined updated */
+		//传感器组合更新
 		orb_check(_sensor_combined_sub, &updated);
 
 		if (updated) {
@@ -338,6 +355,7 @@ Navigator::task_main()
 		}
 
 		/* parameters updated */
+		//参数更新
 		orb_check(_param_update_sub, &updated);
 
 		if (updated) {
@@ -359,6 +377,7 @@ Navigator::task_main()
 		}
 
 		/* navigation capabilities updated */
+		//导航功能更新
 		orb_check(_fw_pos_ctrl_status_sub, &updated);
 
 		if (updated) {
@@ -366,6 +385,7 @@ Navigator::task_main()
 		}
 
 		/* home position updated */
+		//家位置更新
 		orb_check(_home_pos_sub, &updated);
 
 		if (updated) {
@@ -384,6 +404,7 @@ Navigator::task_main()
 				struct position_setpoint_triplet_s *curr = get_position_setpoint_triplet();
 
 				// store current position as previous position and goal as next
+				//将目前位置存到上一位置，目标位置存到下一位置
 				rep->previous.yaw = get_global_position()->yaw;
 				rep->previous.lat = get_global_position()->lat;
 				rep->previous.lon = get_global_position()->lon;
@@ -394,6 +415,7 @@ Navigator::task_main()
 				rep->current.type = position_setpoint_s::SETPOINT_TYPE_LOITER;
 
 				// Go on and check which changes had been requested
+				//继续查看请求的变更
 				if (PX4_ISFINITE(cmd.param4)) {
 					rep->current.yaw = cmd.param4;
 
@@ -402,6 +424,7 @@ Navigator::task_main()
 				}
 
 				// Position change with optional altitude change
+				//位置变更 可选高度变更？
 				if (PX4_ISFINITE(cmd.param5) && PX4_ISFINITE(cmd.param6)) {
 					rep->current.lat = (cmd.param5 < 1000) ? cmd.param5 : cmd.param5 / (double)1e7;
 					rep->current.lon = (cmd.param6 < 1000) ? cmd.param6 : cmd.param6 / (double)1e7;
@@ -524,6 +547,7 @@ Navigator::task_main()
 		}
 
 		/* Check geofence violation */
+		//检查围栏违规
 		static hrt_abstime last_geofence_check = 0;
 
 		if (have_geofence_position_data &&
@@ -541,9 +565,11 @@ Navigator::task_main()
 
 			if (!inside) {
 				/* inform other apps via the mission result */
+				//通过任务结果通知其他应用程序
 				_geofence_result.geofence_violated = true;
 
 				/* Issue a warning about the geofence violation once */
+				//越过地理围栏警告一次
 				if (!_geofence_violation_warning_sent) {
 					mavlink_log_critical(&_mavlink_log_pub, "Geofence violation");
 					_geofence_violation_warning_sent = true;
@@ -554,6 +580,7 @@ Navigator::task_main()
 				_geofence_result.geofence_violated = false;
 
 				/* Reset the _geofence_violation_warning_sent field */
+				//重设警告
 				_geofence_violation_warning_sent = false;
 			}
 
@@ -561,6 +588,7 @@ Navigator::task_main()
 		}
 
 		/* Do stuff according to navigation state set by commander */
+		//按commander设定的导航状态工作
 		switch (_vstatus.nav_state) {
 		case vehicle_status_s::NAVIGATION_STATE_AUTO_MISSION:
 			_pos_sp_triplet_published_invalid_once = false;
@@ -632,11 +660,13 @@ Navigator::task_main()
 		}
 
 		/* iterate through navigation modes and set active/inactive for each */
+		//迭代导航模式，并为每个设置活动/不活动
 		for (unsigned int i = 0; i < NAVIGATOR_MODE_ARRAY_SIZE; i++) {
 			_navigation_mode_array[i]->run(_navigation_mode == _navigation_mode_array[i]);
 		}
 
 		/* if we landed and have not received takeoff setpoint then stay in idle */
+		//如果我们着陆并没有收到起飞设定值，那就保持空闲
 		if (_land_detected.landed &&
 		    !((_vstatus.nav_state == vehicle_status_s::NAVIGATION_STATE_AUTO_TAKEOFF)
 		      || (_vstatus.nav_state == vehicle_status_s::NAVIGATION_STATE_AUTO_MISSION))) {
@@ -649,6 +679,7 @@ Navigator::task_main()
 		}
 
 		/* if nothing is running, set position setpoint triplet invalid once */
+		//如果没东西在运行，设置位置设定值三元组无效一次
 		if (_navigation_mode == nullptr && !_pos_sp_triplet_published_invalid_once) {
 			_pos_sp_triplet_published_invalid_once = true;
 			_pos_sp_triplet.previous.valid = false;
@@ -707,6 +738,7 @@ Navigator::start()
 	ASSERT(_navigator_task == -1);
 
 	/* start the task */
+	//开始任务
 	_navigator_task = px4_task_spawn_cmd("navigator",
 					     SCHED_DEFAULT,
 					     SCHED_PRIORITY_NAVIGATION,
